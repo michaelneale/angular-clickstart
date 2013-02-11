@@ -1,0 +1,171 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Build and test the Angular.js seed app</description>
+  <logRotator>
+    <daysToKeep>60</daysToKeep>
+    <numToKeep>-1</numToKeep>
+    <artifactDaysToKeep>-1</artifactDaysToKeep>
+    <artifactNumToKeep>20</artifactNumToKeep>
+  </logRotator>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <nectar.plugins.rbac.groups.JobProxyGroupContainer>
+      <groups/>
+    </nectar.plugins.rbac.groups.JobProxyGroupContainer>
+    <com.cloudbees.jenkins.plugins.PublicKey/>
+    <com.cloudbees.plugins.deployer.DeployNowJobProperty>
+      <oneClickDeploy>false</oneClickDeploy>
+      <configuration>
+        <user>(jenkins)</user>
+        <account>${account}</account>
+        <deployables/>
+      </configuration>
+    </com.cloudbees.plugins.deployer.DeployNowJobProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <name></name>
+        <refspec></refspec>
+        <url>${repositoryUrl}</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>**</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <disableSubmodules>false</disableSubmodules>
+    <recursiveSubmodules>false</recursiveSubmodules>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <authorOrCommitter>false</authorOrCommitter>
+    <clean>false</clean>
+    <wipeOutWorkspace>false</wipeOutWorkspace>
+    <pruneBranches>false</pruneBranches>
+    <remotePoll>false</remotePoll>
+    <ignoreNotifyCommit>false</ignoreNotifyCommit>
+    <useShallowClone>false</useShallowClone>
+    <buildChooser class="hudson.plugins.git.util.DefaultBuildChooser"/>
+    <gitTool>Default</gitTool>
+    <submoduleCfg class="list"/>
+    <relativeTargetDir></relativeTargetDir>
+    <reference></reference>
+    <excludedRegions></excludedRegions>
+    <excludedUsers></excludedUsers>
+    <gitConfigName></gitConfigName>
+    <gitConfigEmail></gitConfigEmail>
+    <skipTag>false</skipTag>
+    <includedRegions></includedRegions>
+    <scmName></scmName>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <jdk>(Default)</jdk>
+  <triggers class="vector">
+    <com.cloudbees.jenkins.forge.ForgePushTrigger>
+      <spec></spec>
+    </com.cloudbees.jenkins.forge.ForgePushTrigger>
+  </triggers>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>
+export DISPLAY=:1
+Xvfb :1 &amp;
+
+#
+# Fetch node and testacular if we don't have it already
+#
+
+node_version=v0.8.14
+install_name=node-$node_version-linux-x64
+node_home=$PWD/$install_name
+
+if [ ! -e $install_name.tar.gz ]
+then
+    wget http://nodejs.org/dist/$node_version/$install_name.tar.gz
+    tar xf $install_name.tar.gz
+    $node_home/bin/npm install -g testacular
+fi
+
+# 
+# run the Angular.js tests (using a browser on the build server)
+#
+
+export PATH=$PATH:$node_home/bin
+scripts/test.sh  --single-run --browsers="Chrome,Firefox" --reporters="dots,junit" --no-colors
+
+#
+# run the Angular.js e2e tests (this requires a server too)
+#
+
+node scripts/web-server.js &gt; /dev/null &amp;
+NODE_PID=$!
+scripts/e2e-test.sh --single-run --browsers="Chrome,Firefox" --reporters="dots,junit" --no-colors
+kill -s TERM $NODE_PID
+
+
+#
+# package the app for the CloudBees node.js stack (deployer picks it up)
+# 
+
+# Firstly, we are going to throw in a little express.js static web server
+# for fun ! can probably replace the one in the upstream
+# ideally - if angular folks agree.
+
+cat > "app/package.json" << EOF
+  {
+    "name": "hello-world",
+    "description": "hello world test app",
+    "version": "0.0.1",
+    "private": true,
+    "dependencies": {
+      "express": "3.x",
+      "connect" : "2.x" 
+    }
+  }
+EOF
+
+cat > "app/main.js" << EOF
+  var express = require('express');
+  var connect = require('connect');
+  var app = express();
+  app.use(connect.compress());
+  console.log(__dirname);
+  app.use(express.static(__dirname + '/'));
+  app.listen(process.env.PORT);
+EOF
+
+
+
+
+cd app
+mkdir -p ../target
+rm -rf ../target/app.zip
+zip -r ../target/app.zip *
+
+</command>
+    </hudson.tasks.Shell>
+    <com.cloudbees.plugins.deployer.DeployBuilder>
+      <configuration>
+        <user>(jenkins)</user>
+        <account>${account}</account>
+        <deployables>
+          <com.cloudbees.plugins.deployer.deployables.WildcardMatchingDeployable>
+            <applicationId>${applicationName}</applicationId>
+            <applicationEnvironment></applicationEnvironment>
+            <applicationConfig/>
+            <apiEndPoint>https://api.cloudbees.com/api</apiEndPoint>
+            <filePattern>target/*.zip</filePattern>
+          </com.cloudbees.plugins.deployer.deployables.WildcardMatchingDeployable>
+        </deployables>
+      </configuration>
+    </com.cloudbees.plugins.deployer.DeployBuilder>
+  </builders>
+  <publishers/>
+  <buildWrappers/>
+</project>
