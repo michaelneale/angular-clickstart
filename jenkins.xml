@@ -141,9 +141,9 @@ cat > "app/main.js" &lt;&lt; EOF
 EOF
 
 
-
-
 cd app
+npm install
+
 mkdir -p ../target
 rm -rf ../target/app.zip
 zip -r ../target/app.zip *
